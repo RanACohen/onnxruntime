@@ -4,39 +4,28 @@
 #include "core/providers/cpu/reduction/reduction_ops.h"
 #include "core/providers/common.h"
 #include "core/util/math_cpuonly.h"
+#include "core/framework/op_kernel_context_internal.h"
+
 using namespace std;
 namespace onnxruntime {
 
-#define REGISTER_UNARY_ELEMENTWISE_KERNEL(x, sinceVersion)                            \
-  ONNX_CPU_OPERATOR_TYPED_KERNEL(                                                     \
-      x,                                                                              \
-      sinceVersion,                                                                   \
-      float,                                                                          \
-      KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()),   \
-      x<float>);                                                                      \
-                                                                                      \
-  ONNX_CPU_OPERATOR_TYPED_KERNEL(                                                     \
-      x,                                                                              \
-      sinceVersion,                                                                   \
-      int32_t,                                                                        \
-      KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<int32_t>()), \
-      x<int32_t>);
+#define REGISTER_UNARY_ELEMENTWISE_KERNEL(x, sinceVersion)                                                             \
+  ONNX_CPU_OPERATOR_TYPED_KERNEL(                                                                                      \
+      x, sinceVersion, float, KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<float>()), x<float>); \
+                                                                                                                       \
+  ONNX_CPU_OPERATOR_TYPED_KERNEL(x, sinceVersion, int32_t,                                                             \
+                                 KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<int32_t>()),       \
+                                 x<int32_t>);
 
-#define REGISTER_UNARY_ELEMENTWISE_KERNEL_DOUBLE_ONLY(x, sinceVersion)               \
-  ONNX_CPU_OPERATOR_TYPED_KERNEL(                                                    \
-      x,                                                                             \
-      sinceVersion,                                                                  \
-      double,                                                                        \
-      KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<double>()), \
-      x<double>);
+#define REGISTER_UNARY_ELEMENTWISE_KERNEL_DOUBLE_ONLY(x, sinceVersion)                                          \
+  ONNX_CPU_OPERATOR_TYPED_KERNEL(x, sinceVersion, double,                                                       \
+                                 KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<double>()), \
+                                 x<double>);
 
-#define REGISTER_UNARY_ELEMENTWISE_KERNEL_INT64_ONLY(x, sinceVersion)                 \
-  ONNX_CPU_OPERATOR_TYPED_KERNEL(                                                     \
-      x,                                                                              \
-      sinceVersion,                                                                   \
-      int64_t,                                                                        \
-      KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<int64_t>()), \
-      x<int64_t>);
+#define REGISTER_UNARY_ELEMENTWISE_KERNEL_INT64_ONLY(x, sinceVersion)                                            \
+  ONNX_CPU_OPERATOR_TYPED_KERNEL(x, sinceVersion, int64_t,                                                       \
+                                 KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<int64_t>()), \
+                                 x<int64_t>);
 
 REGISTER_UNARY_ELEMENTWISE_KERNEL(ReduceL1, 1);
 REGISTER_UNARY_ELEMENTWISE_KERNEL(ReduceL2, 1);
@@ -61,13 +50,8 @@ REGISTER_UNARY_ELEMENTWISE_KERNEL(ArgMin, 1);
 //               be direct use as row major matrix [block_size, blocks], where blocks is the
 //               size of each reduce.
 template <typename T>
-bool PrepareForReduce(OpKernelContext* ctx,
-                      std::vector<T>& transposedInputData,
-                      Tensor** reducedTensor,
-                      int64_t& block_size,
-                      int64_t& blocks,
-                      const std::vector<int64_t>& axes_,
-                      bool keepdims_,
+bool PrepareForReduce(OpKernelContext* ctx, std::vector<T>& transposedInputData, Tensor** reducedTensor,
+                      int64_t& block_size, int64_t& blocks, const std::vector<int64_t>& axes_, bool keepdims_,
                       bool check_no_transpose = false) {
   const auto* input_tensor_ptr = ctx->Input<Tensor>(0);
   ORT_ENFORCE(input_tensor_ptr != nullptr);
@@ -82,15 +66,15 @@ bool PrepareForReduce(OpKernelContext* ctx,
 
   if (axes.empty()) {
     // This is the default case for non-arg kind reductions. Reduce on all dimensions.
-    for (size_t i = 0; i < ndim; i++)
-      axes.push_back(i);
+    for (size_t i = 0; i < ndim; i++) axes.push_back(i);
   }
 
   std::sort(axes.begin(), axes.end());
 
   // If all reduced axes are located at the tail of the input shape, then copy could be skipped is required
   bool need_copy = true;
-  if (axes.size() <= ndim && axes.front() == static_cast<int64_t>(ndim - axes.size()) && axes.back() == static_cast<int64_t>(ndim) - 1) {
+  if (axes.size() <= ndim && axes.front() == static_cast<int64_t>(ndim - axes.size()) &&
+      axes.back() == static_cast<int64_t>(ndim) - 1) {
     need_copy = false;
   }
 
@@ -99,7 +83,7 @@ bool PrepareForReduce(OpKernelContext* ctx,
     keep_axis[i] = false;
   }
 
-  //transpose the input so that all to-be-reduced axes are at the head
+  // transpose the input so that all to-be-reduced axes are at the head
   vector<int64_t> transposed_axes(axes.begin(), axes.end());
   for (size_t i = 0; i < ndim; ++i) {
     if (keep_axis[i]) {
@@ -130,7 +114,7 @@ bool PrepareForReduce(OpKernelContext* ctx,
   const T* from_data = input.template Data<T>();
   size_t count = input.Shape().Size();
 
-  //set to-be-reduced axes to one. squeeze is keepdims_ is false
+  // set to-be-reduced axes to one. squeeze is keepdims_ is false
   int64_t first_dim = 1;
   std::vector<int64_t> reduced_dims;
   for (size_t i = 0; i < in_dims.size(); i++) {
@@ -180,10 +164,7 @@ bool PrepareForReduce(OpKernelContext* ctx,
         from_index += stride_x[i] * itr_idxs[i];
       }
 
-      memcpy(
-          to_data + blocksize * index,
-          from_data + blocksize * from_index,
-          blocksize * sizeof(T));
+      memcpy(to_data + blocksize * index, from_data + blocksize * from_index, blocksize * sizeof(T));
 
       ++itr_idxs[itr_axes - 1];
       for (int i = itr_axes - 1; i >= 1; --i) {
@@ -316,7 +297,8 @@ Status ReduceMean<T>::Compute(OpKernelContext* ctx) const {
   int64_t block_size;
   int64_t blocks;
   Tensor* reduced;
-  bool no_transpose = PrepareForReduce<T>(ctx, transposedInputData, &reduced, block_size, blocks, axes_, keepdims_, true);
+  bool no_transpose =
+      PrepareForReduce<T>(ctx, transposedInputData, &reduced, block_size, blocks, axes_, keepdims_, true);
 
   T* output_data = reduced->template MutableData<T>();
 
@@ -370,24 +352,43 @@ Status ReduceProd<T>::Compute(OpKernelContext* ctx) const {
 }
 
 template <typename T>
+inline void reduce(int64_t t_per_partition, int64_t block_size, int64_t blocks, T* output_data, const T* input_data,
+                   int32_t taskid) {
+  int64_t start_index = taskid * t_per_partition;
+  int64_t end_index = block_size - start_index < t_per_partition ? block_size : start_index + t_per_partition;
+  for (; start_index < end_index; ++start_index) {
+    const T* p = input_data + (start_index * blocks);
+    output_data[start_index] = ConstEigenVectorMap<T>(p, blocks).sum();
+  }
+}
+
+template <typename T>
 Status ReduceSum<T>::Compute(OpKernelContext* ctx) const {
+  concurrency::ThreadPool* tp = ctx->GetOperatorThreadPool();
+
   std::vector<T> transposedInputData;
   int64_t block_size;
   int64_t blocks;
   Tensor* reduced;
-  bool no_transpose = PrepareForReduce<T>(ctx, transposedInputData, &reduced, block_size, blocks, axes_, keepdims_, true);
+  bool no_transpose =
+      PrepareForReduce<T>(ctx, transposedInputData, &reduced, block_size, blocks, axes_, keepdims_, true);
 
   T* output_data = reduced->template MutableData<T>();
 
   if (no_transpose) {
     const T* input_data = ctx->Input<Tensor>(0)->template Data<T>();
-
-#ifdef USE_OPENMP
-#pragma omp parallel for
-#endif
-    for (int64_t i = 0; i < block_size; ++i) {
-      output_data[i] = ConstEigenVectorMap<T>(input_data + (i * blocks), blocks).sum();
+    if (tp != nullptr && block_size > 1) {
+      int64_t partition_count = std::min<int64_t>(tp->NumThreads() + 1, block_size);
+      int64_t t_per_partition = (block_size + partition_count - 1) / partition_count;
+      tp->ParallelFor(partition_count, [t_per_partition, block_size, blocks, output_data, input_data](int32_t taskid) {
+        reduce(t_per_partition, block_size, blocks, output_data, input_data, taskid);
+      });
+    } else {
+      for (int64_t i = 0; i < block_size; ++i) {
+        output_data[i] = ConstEigenVectorMap<T>(input_data + (i * blocks), blocks).sum();
+      }
     }
+
   } else {
     EigenVectorMap<T> out_vec(output_data, block_size);
     out_vec = ConstEigenMatrixMap<T>(&transposedInputData[0], block_size, blocks).rowwise().sum();
