@@ -28,7 +28,8 @@ SparseTensor* OpKernelContext::Output(int index, size_t nnz, const TensorShape& 
 }
 
 OrtValue* OpKernelContext::OutputMLValue(int index, const TensorShape& shape, size_t nnz) {
-  if (index < 0 || index >= OutputCount()) return nullptr;
+  if (index < 0 || index >= OutputCount())
+    return nullptr;
 
   //: Though we don't need to give 'ret' an initial value, GCC would generate a warning if we don't do that
   //"error: 'ret' may be used uninitialized in this function"
@@ -51,7 +52,8 @@ int OpKernelContext::NumVariadicInputs(size_t arg_num) const {
 
 Status OpKernelContext::GetTempSpaceAllocator(AllocatorPtr* output) const {
   *output = execution_frame_.GetAllocator(kernel_.Allocator(0, OrtMemTypeDefault));
-  if (!*output) return Status(common::ONNXRUNTIME, common::FAIL, "TempSpace allocator not found");
+  if (!*output)
+    return Status(common::ONNXRUNTIME, common::FAIL, "TempSpace allocator not found");
   return Status::OK();
 }
 
@@ -68,7 +70,8 @@ MLDataType OpKernelContext::OutputType(int index) const {
 }
 
 Fence_t OpKernelContext::InputFence(int index) const {
-  if (index >= InputCount()) return nullptr;
+  if (index >= InputCount())
+    return nullptr;
 
   int input_index = GetInputArgIndex(index);
   const OrtValue* p_ml_value = execution_frame_.GetNodeInputOrOutputMLValue(input_index);
@@ -76,7 +79,8 @@ Fence_t OpKernelContext::InputFence(int index) const {
 }
 
 Fence_t OpKernelContext::ImplicitInputFence(int index) const {
-  if (index >= ImplicitInputCount()) return nullptr;
+  if (index >= ImplicitInputCount())
+    return nullptr;
 
   int input_index = GetImplicitInputArgIndex(index);
   const OrtValue* p_ml_value = execution_frame_.GetNodeInputOrOutputMLValue(input_index);
@@ -84,7 +88,8 @@ Fence_t OpKernelContext::ImplicitInputFence(int index) const {
 }
 
 Fence_t OpKernelContext::OutputFence(int index) const {
-  if (index >= OutputCount()) return nullptr;
+  if (index >= OutputCount())
+    return nullptr;
 
   auto output_arg_index = GetOutputArgIndex(index);
   const OrtValue* p_ml_value = execution_frame_.GetNodeInputOrOutputMLValue(output_arg_index);
@@ -108,21 +113,24 @@ int OpKernelContext::GetOutputArgIndex(int index) const { return node_output_sta
 onnxruntime::NodeIndex OpKernelContext::GetNodeIndex() const { return kernel_.Node().Index(); }
 
 const OrtValue* OpKernelContext::GetInputMLValue(int index) const {
-  if (index < 0 || index >= InputCount()) return nullptr;
+  if (index < 0 || index >= InputCount())
+    return nullptr;
 
   int input_arg_index = GetInputArgIndex(index);
   return execution_frame_.GetNodeInputOrOutputMLValue(input_arg_index);
 }
 
 const OrtValue* OpKernelContext::GetImplicitInputMLValue(int index) const {
-  if (index < 0 || index >= ImplicitInputCount()) return nullptr;
+  if (index < 0 || index >= ImplicitInputCount())
+    return nullptr;
 
   int input_arg_index = GetImplicitInputArgIndex(index);
   return execution_frame_.GetNodeInputOrOutputMLValue(input_arg_index);
 }
 
 OrtValue* OpKernelContext::GetOutputMLValue(int index) {
-  if (index < 0 || index >= OutputCount()) return nullptr;
+  if (index < 0 || index >= OutputCount())
+    return nullptr;
 
   auto output_arg_index = GetOutputArgIndex(index);
   return execution_frame_.GetMutableNodeInputOrOutputMLValue(output_arg_index);
